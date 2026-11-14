@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>xSplesh — Fire Activity Calendar</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #080e18; color: #edf3fa;
+    font-family: Arial, sans-serif;
+  }
+  header {
+    padding: 24px 6%; border-bottom: 1px solid #243044;
+    font-size: 24px; font-weight: bold;
+  }
+  main { max-width: 1100px; margin: 50px auto; padding: 0 24px; }
+  .label { color: #ff965e; font-size: 12px; letter-spacing: 2px; }
+  h1 { font-size: clamp(36px, 6vw, 64px); margin: 20px 0; }
+  p { color: #a7b5c9; line-height: 1.6; }
+  .panel {
+    margin-top: 32px; padding: 24px; background: #111b2a;
+    border: 1px solid #29364a; border-radius: 20px;
+  }
+  .toolbar {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  }
+  h2 { margin: 0 auto 0 0; font-size: 22px; }
+  button, select {
+    background: #1b293c; color: #edf3fa;
+    border: 1px solid #3b4c64; border-radius: 8px;
+    padding: 10px; font: inherit; cursor: pointer;
+  }
+  button:hover { background: #30415a; }
+  button:focus-visible, select:focus-visible {
+    outline: 2px solid #ff965e; outline-offset: 3px;
+  }
+  .grid {
+    display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px;
+  }
+  .weekdays { margin: 24px 0 10px; text-align: center; color: #a7b5c9; }
+  .day { min-height: 54px; }
+  .selected { border: 2px solid #ff965e; color: #ffb68e; }
+  #details { padding-top: 16px; border-top: 1px solid #29364a; }
+  .status { font-size: 13px; color: #a7b5c9; }
+</style>
+</head>
+<body>
+<header>xSplesh<span style="color:#ff965e">.</span></header>
+<main>
+  <div class="label">MODIS + VIIRS / FIRE ACTIVITY</div>
+  <h1>Every fire has a history.</h1>
+  <p>Explore satellite hotspot observations over time.</p>
+  <div class="label">STUDY AREA: CENTRAL YAKUTIA</div>
+
+  <section class="panel" aria-label="Fire activity calendar">
+    <div class="toolbar">
+      <h2 id="monthTitle"></h2>
+      <button id="previous" aria-label="Previous month">←</button>
+      <button id="next" aria-label="Next month">→</button>
+      <select id="year" aria-label="Year">
+        <option>2020</option>
+        <option>2021</option>
+        <option>2022</option>
+        <option>2023</option>
+        <option selected>2024</option>
+      </select>
+    </div>
+    <p class="status">Awaiting NASA FIRMS data · Unloaded days do not mean no fires.</p>
+    <div class="grid weekdays" aria-hidden="true">
+      <span>Mon</span><span>Tue</span><span>Wed</span>
+      <span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+    </div>
+    <div class="grid" id="calendar"></div>
+    <p id="details" aria-live="polite">Select a day to inspect its data status.</p>
+  </section>
+</main>
+
+<script>
+  let year = 2024;
+  let month = 0;
+  const calendar = document.getElementById("calendar");
+  const yearSelect = document.getElementById("year");
+  const details = document.getElementById("details");
+
+let fireData = {};
+
+fetch("data/daily_counts.json")
+  .then(response => response.json())
+  .then(data => {
+    fireData = data;
+    render();
+  })
+  .catch(error => console.error(error));
+
+
+  function render() {
+    const date = new Date(year, month, 1);
+    document.getElementById("monthTitle").textContent =
+      date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+
+    yearSelect.value = String(year);
+    calendar.replaceChildren();
+    details.textContent = "Select a day to inspect its data status.";
+
+    const offset = (date.getDay() + 6) % 7;
+    const days = new Date(year, month + 1, 0).getDate();
+
+    for (let i = 0; i < offset; i++) {
+      calendar.append(document.createElement("span"));
+    }
+
+    for (let day = 1; day <= days; day++) {
+      const button = document.createElement("button");
+      const label = new Date(year, month, day).toLocaleDateString(
+        "en-US", { month: "long", day: "numeric", year: "numeric" }
+      );
+      button.className = "day";
+
+const key = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+const counts = fireData[key];
+
+if (counts) {
+  const activity = counts.VIIRS;
+
+  if (activity >= 100) {
+    button.style.background = "#dc2626";
+  } else if (activity >= 30) {
+    button.style.background = "#ea580c";
+  } else if (activity > 0) {
+    button.style.background = "#ca8a04";
+  }
+}
+
+      button.textContent = day;
+      button.setAttribute("aria-label", label + ": data not loaded");
+      button.setAttribute("aria-pressed", "false");
+      button.onclick = () => {
+        calendar.querySelectorAll("button").forEach(item => {
+          item.classList.remove("selected");
+          item.setAttribute("aria-pressed", "false");
+        });
+        button.classList.add("selected");
+        button.setAttribute("aria-pressed", "true");
+        details.textContent =
+          
+label + " — MODIS: " +
+(fireData[`${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`]?.MODIS ?? 0) +
+" | VIIRS: " +
+(fireData[`${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`]?.VIIRS ?? 0);
+
+      };
+      calendar.append(button);
+    }
+
+    document.getElementById("previous").disabled = year === 2020 && month === 0;
+    document.getElementById("next").disabled = year === 2024 && month === 11;
+  }
+
+  function moveMonth(direction) {
+    const date = new Date(year, month + direction, 1);
+    if (date.getFullYear() < 2020 || date.getFullYear() > 2024) return;
+    year = date.getFullYear();
+    month = date.getMonth();
+    render();
+  }
+
+  document.getElementById("previous").onclick = () => moveMonth(-1);
+  document.getElementById("next").onclick = () => moveMonth(1);
+  yearSelect.onchange = () => {
+    year = Number(yearSelect.value);
+    render();
+  };
+  render();
+
+
+const chartBox = document.createElement("section");
+chartBox.style.cssText = "margin:24px auto;padding:24px;background:#13283e;border-radius:20px;color:white;max-width:900px;font-family:Arial";
+document.querySelector("main").append(chartBox);
+
+function drawChart() {
+  const days = new Date(year, month + 1, 0).getDate();
+  const values = [];
+
+  for (let day = 1; day <= days; day++) {
+    const key = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    values.push(fireData[key] || { MODIS: 0, VIIRS: 0 });
+  }
+
+  const maximum = Math.max(1, ...values.flatMap(v => [v.MODIS, v.VIIRS]));
+
+  chartBox.innerHTML = `
+    <h2>MODIS vs VIIRS — Daily Hotspot Detections</h2>
+    <p style="color:#aabed0">Blue: MODIS | Orange: VIIRS</p>
+    <div style="display:flex;align-items:end;gap:3px;height:200px;border-bottom:1px solid #789">
+      ${values.map((v, i) => `
+        <div title="Day ${i + 1}: MODIS ${v.MODIS}, VIIRS ${v.VIIRS}"
+             style="flex:1;display:flex;align-items:end;gap:1px;height:100%">
+          <div style="flex:1;background:#38bdf8;height:${v.MODIS / maximum * 100}%;min-height:${v.MODIS ? 2 : 0}px"></div>
+          <div style="flex:1;background:#fb923c;height:${v.VIIRS / maximum * 100}%;min-height:${v.VIIRS ? 2 : 0}px"></div>
+        </div>
+      `).join("")}
+    </div>
+    <p style="color:#aabed0;font-size:12px">Days 1–${days} | Different sensors, not directly equivalent</p>
+  `;
+}
+
+new MutationObserver(drawChart).observe(calendar, { childList: true });
+drawChart();
+</script>
+
+
+<section style="max-width:900px;margin:24px auto;padding:28px;background:#13283e;color:white;border-radius:20px;font-family:Arial">
+  <h2>Sensor Harmony</h2>
+  <p style="color:#aabed0">Understanding MODIS and VIIRS fire detections</p>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-top:20px">
+    <div style="padding:20px;background:#1c3954;border-radius:14px">
+      <h3 style="color:#38bdf8">MODIS</h3>
+      <p>Fire detection resolution: approximately 1 km.</p>
+      <p>Satellites: Terra and Aqua.</p>
+      <p>Provides a long historical record of fire activity.</p>
+    </div>
+
+    <div style="padding:20px;background:#1c3954;border-radius:14px">
+      <h3 style="color:#fb923c">VIIRS</h3>
+      <p>Fire detection resolution: approximately 375 m.</p>
+      <p>Satellite: Suomi NPP (dataset used here).</p>
+      <p>Can detect smaller hot spots than MODIS.</p>
+    </div>
+  </div>
+
+  <h3 style="margin-top:24px">Why harmonization matters</h3>
+  <p>
+    MODIS and VIIRS have different spatial resolutions, sensitivities,
+    and observation times. Their detection counts are not directly
+    equivalent and should not simply be added together.
+  </p>
+  <p style="color:#aabed0;font-size:14px">
+    Current prototype: sensor-specific daily counts and comparisons.
+    Full cross-sensor harmonization remains future work.
+  </p>
+</section>
+</body>
+</html>
