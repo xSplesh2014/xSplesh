@@ -241,5 +241,74 @@ drawChart();
     Full cross-sensor harmonization remains future work.
   </p>
 </section>
+<section style="max-width:900px;margin:24px auto;padding:24px;background:#13283e;color:white;border-radius:20px">
+  <h2>Where MODIS and VIIRS detected hot spots</h2>
+  <label>June 2024 · Day <select id="map-day"></select></label>
+  <p>
+    <span style="color:#38bdf8">■ MODIS only</span> ·
+    <span style="color:#fb923c">■ VIIRS only</span> ·
+    <span style="color:#c084fc">■ Both sensors</span>
+  </p>
+  <p id="map-summary" aria-live="polite">Loading satellite data…</p>
+  <svg id="fire-map" role="img" aria-label="Map of detected hot spots in Central Yakutia"
+       style="width:100%;height:360px;background:#0b1929;border-radius:12px"></svg>
+  <p>Central Yakutia · 0.1° grid · UTC dates. Purple means both sensors detected hot spots in the same grid cell on the same day.</p>
+</section>
+
+<script>
+{
+  const daySelect = document.getElementById("map-day");
+  const map = document.getElementById("fire-map");
+  const summary = document.getElementById("map-summary");
+
+  for (let day = 1; day <= 30; day++) {
+    const date = `2024-06-${String(day).padStart(2, "0")}`;
+    daySelect.add(new Option(String(day), date));
+  }
+  daySelect.value = "2024-06-15";
+
+  fetch("data/map_june_2024.json")
+    .then(response => {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json();
+    })
+    .then(data => {
+      const cells = Object.values(data).flat();
+      if (!cells.length) {
+        summary.textContent = "No detections in this dataset for June 2024.";
+        return;
+      }
+
+      // Approximate local proportions using the region's latitude.
+      const longitudeScale = Math.cos(63 * Math.PI / 180);
+      const west = Math.min(...cells.map(cell => cell.lon)) - 0.1;
+      const east = Math.max(...cells.map(cell => cell.lon)) + 0.1;
+      const south = Math.min(...cells.map(cell => cell.lat)) - 0.1;
+      const north = Math.max(...cells.map(cell => cell.lat)) + 0.1;
+      map.setAttribute("viewBox", `0 0 ${(east - west) * longitudeScale} ${north - south}`);
+
+      function drawMap() {
+        const selected = data[daySelect.value] || [];
+        const shared = selected.filter(cell => cell.MODIS > 0 && cell.VIIRS > 0).length;
+        summary.textContent = selected.length
+          ? `${selected.length} cells with detections · ${shared} seen by both sensors`
+          : "No detections recorded for this day in the dataset.";
+
+        map.innerHTML = selected.map(cell => {
+          const color = cell.MODIS && cell.VIIRS ? "#c084fc" : cell.MODIS ? "#38bdf8" : "#fb923c";
+          const x = (cell.lon - west - 0.05) * longitudeScale;
+          const y = north - cell.lat - 0.05;
+          return `<rect x="${x}" y="${y}" width="${0.1 * longitudeScale}" height="0.1" fill="${color}"><title>MODIS: ${cell.MODIS}, VIIRS: ${cell.VIIRS}</title></rect>`;
+        }).join("");
+      }
+
+      daySelect.addEventListener("change", drawMap);
+      drawMap();
+    })
+    .catch(() => {
+      summary.textContent = "Map data could not be loaded.";
+    });
+}
+</script>
 </body>
 </html>
