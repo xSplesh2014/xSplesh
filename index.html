@@ -294,7 +294,37 @@ drawChart();
           ? `${selected.length} cells with detections · ${shared} seen by both sensors`
           : "No detections recorded for this day in the dataset.";
 
-        map.innerHTML = selected.map(cell => {
+        let hotspotLayer = map.querySelector("#hotspot-layer");
+
+if (!hotspotLayer) {
+  const svgNS = "http://www.w3.org/2000/svg";
+  const background = document.createElementNS(svgNS, "image");
+  const params = new URLSearchParams({
+    SERVICE: "WMS",
+    VERSION: "1.1.1",
+    REQUEST: "GetMap",
+    LAYERS: "BlueMarble_ShadedRelief",
+    STYLES: "",
+    SRS: "EPSG:4326",
+    BBOX: `${west},${south},${east},${north}`,
+    WIDTH: "1000",
+    HEIGHT: "600",
+    FORMAT: "image/jpeg"
+  });
+
+  background.setAttribute("href",
+    `https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?${params}`);
+  background.setAttribute("width", (east - west) * longitudeScale);
+  background.setAttribute("height", north - south);
+  background.setAttribute("preserveAspectRatio", "none");
+  background.setAttribute("opacity", "0.65");
+
+  hotspotLayer = document.createElementNS(svgNS, "g");
+  hotspotLayer.id = "hotspot-layer";
+  map.append(background, hotspotLayer);
+}
+
+hotspotLayer.innerHTML = selected.map(cell => {
           const color = cell.MODIS && cell.VIIRS ? "#c084fc" : cell.MODIS ? "#38bdf8" : "#fb923c";
           const x = (cell.lon - west - 0.05) * longitudeScale;
           const y = north - cell.lat - 0.05;
@@ -302,7 +332,6 @@ drawChart();
         }).join("");
       }
 
-      daySelect.addEventListener("change", drawMap);
       const playButton = document.createElement("button");
 playButton.type = "button";
 playButton.textContent = "▶ Play";
@@ -310,6 +339,7 @@ playButton.style.marginLeft = "12px";
 daySelect.closest("label").after(playButton);
 
 let playbackTimer = null;
+const lastDay = daySelect.options.length - 1;
 
 function stopPlayback() {
   clearInterval(playbackTimer);
@@ -323,7 +353,6 @@ playButton.addEventListener("click", () => {
     return;
   }
 
-  const lastDay = daySelect.options.length - 1;
   if (daySelect.selectedIndex === lastDay) {
     daySelect.selectedIndex = 0;
     drawMap();
@@ -341,6 +370,7 @@ playButton.addEventListener("click", () => {
 });
 
 daySelect.addEventListener("change", stopPlayback);
+      
       drawMap();
     })
     .catch(() => {
