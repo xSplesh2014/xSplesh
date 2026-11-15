@@ -303,6 +303,44 @@ drawChart();
       }
 
       daySelect.addEventListener("change", drawMap);
+      const playButton = document.createElement("button");
+playButton.type = "button";
+playButton.textContent = "▶ Play";
+playButton.style.marginLeft = "12px";
+daySelect.closest("label").after(playButton);
+
+let playbackTimer = null;
+
+function stopPlayback() {
+  clearInterval(playbackTimer);
+  playbackTimer = null;
+  playButton.textContent = "▶ Play";
+}
+
+playButton.addEventListener("click", () => {
+  if (playbackTimer !== null) {
+    stopPlayback();
+    return;
+  }
+
+  const lastDay = daySelect.options.length - 1;
+  if (daySelect.selectedIndex === lastDay) {
+    daySelect.selectedIndex = 0;
+    drawMap();
+  }
+
+  playButton.textContent = "⏸ Pause";
+  playbackTimer = setInterval(() => {
+    daySelect.selectedIndex += 1;
+    drawMap();
+
+    if (daySelect.selectedIndex === lastDay) {
+      stopPlayback();
+    }
+  }, 900);
+});
+
+daySelect.addEventListener("change", stopPlayback);
       drawMap();
     })
     .catch(() => {
