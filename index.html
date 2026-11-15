@@ -44,7 +44,8 @@
   #details { padding-top: 16px; border-top: 1px solid #29364a; }
   .status { font-size: 13px; color: #a7b5c9; }
 </style>
-</head>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script></head>
 <body>
 <header>xSplesh<span style="color:#ff965e">.</span></header>
 <main>
@@ -250,8 +251,8 @@ drawChart();
     <span style="color:#c084fc">■ Both sensors</span>
   </p>
   <p id="map-summary" aria-live="polite">Loading satellite data…</p>
-  <svg id="fire-map" role="img" aria-label="Map of detected hot spots in Central Yakutia"
-       style="width:100%;height:360px;background:#0b1929;border-radius:12px"></svg>
+  <div id="fire-map" aria-label="Map of detected hot spots in Central Yakutia"
+     style="width:100%;height:360px;background:#0b1929;border-radius:12px"></div>
   <p>Central Yakutia · 0.1° grid · UTC dates. Purple means both sensors detected hot spots in the same grid cell on the same day.</p>
 </section>
 
@@ -279,60 +280,50 @@ drawChart();
         return;
       }
 
-      // Approximate local proportions using the region's latitude.
-      const longitudeScale = Math.cos(63 * Math.PI / 180);
-      const west = Math.min(...cells.map(cell => cell.lon)) - 0.1;
-      const east = Math.max(...cells.map(cell => cell.lon)) + 0.1;
-      const south = Math.min(...cells.map(cell => cell.lat)) - 0.1;
-      const north = Math.max(...cells.map(cell => cell.lat)) + 0.1;
-      map.setAttribute("viewBox", `0 0 ${(east - west) * longitudeScale} ${north - south}`);
+      
+      const leafletMap = L.map(map, { scrollWheelZoom: false });
+      leafletMap.attributionControl.setPrefix('<a href="https://leafletjs.com/" translate="no">Leaflet</a>');
+const cellRadius = 0.05;
 
-      function drawMap() {
-        const selected = data[daySelect.value] || [];
-        const shared = selected.filter(cell => cell.MODIS > 0 && cell.VIIRS > 0).length;
-        summary.textContent = selected.length
-          ? `${selected.length} cells with detections · ${shared} seen by both sensors`
-          : "No detections recorded for this day in the dataset.";
+L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 19,
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'
+}).addTo(leafletMap);
 
-        let hotspotLayer = map.querySelector("#hotspot-layer");
+const bounds = L.latLngBounds(cells.map(cell => [cell.lat, cell.lon]));
+leafletMap.fitBounds(bounds.pad(0.1), { padding: [12, 12], maxZoom: 10 });
 
-if (!hotspotLayer) {
-  const svgNS = "http://www.w3.org/2000/svg";
-  const background = document.createElementNS(svgNS, "image");
-  const params = new URLSearchParams({
-    SERVICE: "WMS",
-    VERSION: "1.1.1",
-    REQUEST: "GetMap",
-    LAYERS: "BlueMarble_ShadedRelief",
-    STYLES: "",
-    SRS: "EPSG:4326",
-    BBOX: `${west},${south},${east},${north}`,
-    WIDTH: "1000",
-    HEIGHT: "600",
-    FORMAT: "image/jpeg"
-  });
+const hotspotLayer = L.layerGroup().addTo(leafletMap);
 
-  background.setAttribute("href",
-    `https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?${params}`);
-  background.setAttribute("width", (east - west) * longitudeScale);
-  background.setAttribute("height", north - south);
-  background.setAttribute("preserveAspectRatio", "none");
-  background.setAttribute("opacity", "0.65");
+function drawMap() {
+  const selected = data[daySelect.value] || [];
+  let shared = 0;
+  hotspotLayer.clearLayers();
 
-  hotspotLayer = document.createElementNS(svgNS, "g");
-  hotspotLayer.id = "hotspot-layer";
-  map.append(background, hotspotLayer);
+  for (const cell of selected) {
+    const both = cell.MODIS > 0 && cell.VIIRS > 0;
+    if (both) shared += 1;
+
+    const color = both ? "#c084fc" : cell.MODIS ? "#38bdf8" : "#fb923c";
+    L.rectangle([
+      [cell.lat - cellRadius, cell.lon - cellRadius],
+      [cell.lat + cellRadius, cell.lon + cellRadius]
+    ], {
+      color,
+      weight: 1,
+      fillOpacity: 0.65
+    })
+      .bindTooltip(`MODIS: ${cell.MODIS} | VIIRS: ${cell.VIIRS}`)
+      .addTo(hotspotLayer);
+  }
+
+  summary.textContent = selected.length
+    ? `${selected.length} cells with detections · ${shared} seen by both sensors`
+    : "No detections recorded for this day in the dataset.";
 }
 
-hotspotLayer.innerHTML = selected.map(cell => {
-          const color = cell.MODIS && cell.VIIRS ? "#c084fc" : cell.MODIS ? "#38bdf8" : "#fb923c";
-          const x = (cell.lon - west - 0.05) * longitudeScale;
-          const y = north - cell.lat - 0.05;
-          return `<rect x="${x}" y="${y}" width="${0.1 * longitudeScale}" height="0.1" fill="${color}"><title>MODIS: ${cell.MODIS}, VIIRS: ${cell.VIIRS}</title></rect>`;
-        }).join("");
-      }
-
-      const playButton = document.createElement("button");
+daySelect.addEventListener("change", drawMap);
+const playButton = document.createElement("button");
 playButton.type = "button";
 playButton.textContent = "▶ Play";
 playButton.style.marginLeft = "12px";
